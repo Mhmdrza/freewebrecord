@@ -34,6 +34,7 @@ const backgrounds = [
 export default function Page() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const personCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const segmenterRef = useRef<any>(null)
   const animationRef = useRef<number | null>(null)
   const processedStreamRef = useRef<MediaStream | null>(null)
@@ -99,7 +100,21 @@ export default function Page() {
       const width = canvas.width
       const height = canvas.height
       const currentBackground = backgroundRef.current
-      context.save()
+      const personCanvas = personCanvasRef.current ?? document.createElement('canvas')
+      personCanvasRef.current = personCanvas
+      personCanvas.width = width
+      personCanvas.height = height
+      const personContext = personCanvas.getContext('2d')
+      if (!personContext) return
+
+      personContext.globalCompositeOperation = 'source-over'
+      personContext.clearRect(0, 0, width, height)
+      personContext.drawImage(results.image, 0, 0, width, height)
+      personContext.globalCompositeOperation = 'destination-in'
+      personContext.drawImage(results.segmentationMask, 0, 0, width, height)
+
+      context.globalCompositeOperation = 'source-over'
+      context.clearRect(0, 0, width, height)
       if (currentBackground === 'upload' && uploadedBackgroundRef.current && backgroundImageRef.current?.complete) {
         context.drawImage(backgroundImageRef.current, 0, 0, width, height)
       } else {
@@ -111,11 +126,7 @@ export default function Page() {
         context.fillStyle = gradient
         context.fillRect(0, 0, width, height)
       }
-      context.globalCompositeOperation = 'destination-in'
-      context.drawImage(results.segmentationMask, 0, 0, width, height)
-      context.globalCompositeOperation = 'destination-over'
-      context.drawImage(results.image, 0, 0, width, height)
-      context.restore()
+      context.drawImage(personCanvas, 0, 0, width, height)
     })
       segmenterRef.current = segmenter
       setSegmentationReady(true)
