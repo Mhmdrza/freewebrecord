@@ -14,6 +14,9 @@ import {
   Play,
   RotateCcw,
   Settings2,
+  Sun,
+  Moon,
+  Monitor,
   Sparkles,
   Square,
   Upload,
@@ -42,6 +45,16 @@ export default function Page() {
   const [showSettings, setShowSettings] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [permissionError, setPermissionError] = useState('')
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
+  const [systemDark, setSystemDark] = useState(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const update = () => setSystemDark(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   useEffect(() => {
     if (!recording || isPaused) return
@@ -110,9 +123,15 @@ export default function Page() {
 
   const formatTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
   const backgroundClass = activeBackground === 'upload' ? '' : backgrounds.find((item) => item.value === activeBackground)?.className ?? ''
+  const isDark = theme === 'dark' || (theme === 'system' && systemDark)
 
   return (
-    <main className="min-h-screen bg-[#f4f3f0] text-[#242321]">
+    <main className={`studio-shell min-h-screen bg-[#f4f3f0] text-[#242321] ${isDark ? 'theme-dark' : 'theme-light'}`}>
+      <div className="theme-switcher" aria-label="Color theme">
+        <button onClick={() => setTheme('system')} className={theme === 'system' ? 'active' : ''} aria-label="Use system theme"><Monitor /></button>
+        <button onClick={() => setTheme('light')} className={theme === 'light' ? 'active' : ''} aria-label="Use light theme"><Sun /></button>
+        <button onClick={() => setTheme('dark')} className={theme === 'dark' ? 'active' : ''} aria-label="Use dark theme"><Moon /></button>
+      </div>
       <header className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 sm:px-8 lg:px-12">
         <div className="flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-[#242321] text-[#f7c7a7]"><Video data-icon="inline-start" /></div>
@@ -128,7 +147,8 @@ export default function Page() {
       <section className="mx-auto grid max-w-[1440px] gap-6 px-5 pb-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:px-12">
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#a19c94]">New recording</p><h1 className="font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Make your point.</h1></div><div className="hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-[#77736d] shadow-sm sm:flex"><span className="size-2 rounded-full bg-[#81b6a3]" /> Camera ready</div></div>
-          <div className={`relative aspect-video overflow-hidden rounded-[26px] border border-white/70 bg-[#d8d5ce] shadow-[0_20px_60px_rgba(61,55,46,0.10)] ${backgroundClass}`} style={activeBackground === 'upload' && uploadedBackground ? { backgroundImage: `url(${uploadedBackground})` } : undefined}>
+          <div className={`relative aspect-video overflow-hidden rounded-[26px] border border-white/70 bg-[#d8d5ce] shadow-[0_20px_60px_rgba(61,55,46,0.10)] ${backgroundClass}`}>
+            {activeBackground === 'upload' && uploadedBackground && <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${uploadedBackground}")` }} aria-label="Uploaded background" />}
             <video ref={videoRef} autoPlay muted playsInline className={`absolute inset-0 size-full object-cover ${activeBackground === 'blur' ? 'scale-105 blur-xl' : ''} ${cameraOn ? 'opacity-100' : 'opacity-0'}`} />
             {!cameraOn && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center"><div className="flex size-16 items-center justify-center rounded-2xl bg-white/80 text-[#8f8a80] shadow-sm"><Camera /></div><div><p className="font-medium">Your camera preview will appear here</p><p className="mt-1 text-sm text-[#8f8a80]">Turn on your camera to frame your shot.</p></div><button onClick={startCamera} className="rounded-full bg-[#242321] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#383632]"><Camera data-icon="inline-start" /> Enable camera</button></div>}
             <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-white/85 px-3 py-2 text-xs font-medium backdrop-blur"><Sparkles className="text-[#c48667]" /> {activeBackground === 'upload' ? 'Custom background' : backgrounds.find((item) => item.value === activeBackground)?.name}</div>

@@ -169,6 +169,29 @@
   background: radial-gradient(circle at 70% 25%, oklch(0.84 0.07 310), oklch(0.59 0.08 285));
 }
 
+.theme-switcher {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 20;
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid #dfddd8;
+  border-radius: 999px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 8px 24px rgba(61,55,46,.12);
+  backdrop-filter: blur(12px);
+}
+.theme-switcher button { display:flex; align-items:center; justify-content:center; width:2rem; height:2rem; border-radius:999px; color:#8d8a83; }
+.theme-switcher button.active { background:#242321; color:#fff; }
+.theme-dark { background: #171716 !important; color: #f4f1ed !important; }
+.theme-dark .theme-switcher { border-color:#3b3936; background:rgba(36,35,33,.92); }
+.theme-dark .theme-switcher button.active { background:#f0b18e; color:#242321; }
+.theme-dark header button, .theme-dark aside > div:not(:last-child), .theme-dark aside .bg-white { background:#242321 !important; border-color:#3b3936 !important; color:#f4f1ed !important; }
+.theme-dark aside p, .theme-dark header p, .theme-dark footer, .theme-dark .text-\[\#89857d\], .theme-dark .text-\[\#918c83\], .theme-dark .text-\[\#969088\] { color:#aaa69e !important; }
+.theme-dark .bg-\[\#f6f4f1\], .theme-dark .bg-\[\#f4f1ed\] { background:#302e2b !important; }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
