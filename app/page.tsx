@@ -44,6 +44,7 @@ export default function Page() {
   const chunksRef = useRef<Blob[]>([])
   const [cameraOn, setCameraOn] = useState(false)
   const [segmentationReady, setSegmentationReady] = useState(false)
+  const [mirrorVideo, setMirrorVideo] = useState(true)
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [activeBackground, setActiveBackground] = useState('original')
@@ -65,11 +66,13 @@ export default function Page() {
   const backgroundRef = useRef(activeBackground)
   const uploadedBackgroundRef = useRef(uploadedBackground)
   const backgroundImageRef = useRef<HTMLImageElement | null>(null)
+  const mirrorRef = useRef(mirrorVideo)
 
   useEffect(() => {
     backgroundRef.current = activeBackground
     uploadedBackgroundRef.current = uploadedBackground
-  }, [activeBackground, uploadedBackground])
+    mirrorRef.current = mirrorVideo
+  }, [activeBackground, uploadedBackground, mirrorVideo])
 
   useEffect(() => {
     if (!recording || isPaused) return
@@ -109,9 +112,15 @@ export default function Page() {
 
       personContext.globalCompositeOperation = 'source-over'
       personContext.clearRect(0, 0, width, height)
-      personContext.drawImage(results.image, 0, 0, width, height)
-      personContext.globalCompositeOperation = 'destination-in'
+      personContext.save()
+      if (mirrorRef.current) {
+        personContext.translate(width, 0)
+        personContext.scale(-1, 1)
+      }
       personContext.drawImage(results.segmentationMask, 0, 0, width, height)
+      personContext.globalCompositeOperation = 'source-in'
+      personContext.drawImage(results.image, 0, 0, width, height)
+      personContext.restore()
 
       context.globalCompositeOperation = 'source-over'
       context.clearRect(0, 0, width, height)
@@ -245,7 +254,7 @@ export default function Page() {
 
         <aside className="flex flex-col gap-4 lg:pt-[74px]">
           <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Background</h2><p className="mt-1 text-xs text-[#918c83]">Set the scene for your video.</p></div><button onClick={() => fileRef.current?.click()} className="flex size-9 items-center justify-center rounded-xl bg-[#f4f1ed] text-[#716d66] hover:bg-[#ebe7e1]" aria-label="Upload background"><ImagePlus /></button><input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" /></div><div className="grid grid-cols-2 gap-2">{backgrounds.map((item) => <button key={item.value} onClick={() => setActiveBackground(item.value)} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === item.value ? 'border-[#c48667]' : 'border-transparent'}`}><div className={`absolute inset-0 ${item.className}`} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">{item.name}</span>{activeBackground === item.value && <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-[#c48667] text-white"><Check /></span>}</button>)}{uploadedBackground && <button onClick={() => setActiveBackground('upload')} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === 'upload' ? 'border-[#c48667]' : 'border-transparent'}`}><div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${uploadedBackground})` }} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">Your upload</span></button>}<button onClick={() => fileRef.current?.click()} className="flex aspect-[1.45] flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#d8d3cb] text-xs text-[#918c83] hover:bg-[#faf9f7]"><Upload /><span>Upload image</span></button></div></div>
-          <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Camera & mic</h2><p className="mt-1 text-xs text-[#918c83]">Check your setup before recording.</p></div><button onClick={() => setShowSettings((value) => !value)} className="text-xs font-semibold text-[#b06f55]">{showSettings ? 'Done' : 'Adjust'}</button></div><div className="flex items-center justify-between rounded-xl bg-[#f6f4f1] px-3 py-3"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-white text-[#716d66]"><Camera /></span><div><p className="text-sm font-medium">Facecam</p><p className="text-xs text-[#969088]">{cameraOn ? 'Connected' : 'Not connected'}</p></div></div><span className={`size-2.5 rounded-full ${cameraOn ? 'bg-[#81b6a3]' : 'bg-[#d4cfc7]'}`} /></div>{showSettings && <div className="mt-3 flex items-center justify-between rounded-xl border border-[#ebe7e1] px-3 py-3 text-sm"><span className="text-[#716d66]">Mirror video</span><span className="rounded-full bg-[#242321] px-2 py-1 text-[10px] font-semibold text-white">ON</span></div>}</div>
+          <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Camera & mic</h2><p className="mt-1 text-xs text-[#918c83]">Check your setup before recording.</p></div><button onClick={() => setShowSettings((value) => !value)} className="text-xs font-semibold text-[#b06f55]">{showSettings ? 'Done' : 'Adjust'}</button></div><div className="flex items-center justify-between rounded-xl bg-[#f6f4f1] px-3 py-3"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-white text-[#716d66]"><Camera /></span><div><p className="text-sm font-medium">Facecam</p><p className="text-xs text-[#969088]">{cameraOn ? 'Connected' : 'Not connected'}</p></div></div><span className={`size-2.5 rounded-full ${cameraOn ? 'bg-[#81b6a3]' : 'bg-[#d4cfc7]'}`} /></div>{showSettings && <div className="mt-3 flex items-center justify-between rounded-xl border border-[#ebe7e1] px-3 py-3 text-sm"><div><span className="text-[#716d66]">Mirror video</span><p className="mt-1 text-xs text-[#969088]">Flip the person feed like a mirror.</p></div><button type="button" role="switch" aria-checked={mirrorVideo} onClick={() => setMirrorVideo((value) => !value)} className={`relative h-6 w-11 rounded-full transition ${mirrorVideo ? 'bg-[#242321]' : 'bg-[#d4cfc7]'}`}><span className={`absolute top-1 size-4 rounded-full bg-white transition ${mirrorVideo ? 'left-6' : 'left-1'}`} /></button></div>}</div>
           <div className="rounded-2xl bg-[#242321] p-5 text-white"><div className="flex items-start justify-between"><div><p className="text-xs uppercase tracking-[0.16em] text-[#aaa69e]">Your recording</p><p className="mt-3 font-serif text-3xl">{formatTime(elapsed)}</p></div><Download className="text-[#f0b18e]" /></div><div className="mt-5 flex items-center gap-2 text-xs text-[#aaa69e]"><span className="size-2 rounded-full bg-[#81b6a3]" /> Downloads automatically when you stop.</div></div>
         </aside>
       </section>
