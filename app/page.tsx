@@ -85,9 +85,12 @@ export default function Page() {
   }, [recording, isPaused])
 
   useEffect(() => () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop())
     if (uploadedBackground) URL.revokeObjectURL(uploadedBackground)
   }, [uploadedBackground])
+
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+  }, [])
 
   useEffect(() => {
     const script = document.createElement('script')
