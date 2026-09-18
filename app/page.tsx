@@ -33,16 +33,20 @@ const backgrounds = [
 
 export default function Page() {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const segmenterRef = useRef<any>(null)
+  const animationRef = useRef<number | null>(null)
+  const processedStreamRef = useRef<MediaStream | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const [cameraOn, setCameraOn] = useState(false)
+  const [segmentationReady, setSegmentationReady] = useState(false)
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [activeBackground, setActiveBackground] = useState('original')
   const [uploadedBackground, setUploadedBackground] = useState<string | null>(null)
-  const [blendAmount, setBlendAmount] = useState(82)
   const [showSettings, setShowSettings] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [permissionError, setPermissionError] = useState('')
@@ -57,6 +61,15 @@ export default function Page() {
     return () => media.removeEventListener('change', update)
   }, [])
 
+  const backgroundRef = useRef(activeBackground)
+  const uploadedBackgroundRef = useRef(uploadedBackground)
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null)
+
+  useEffect(() => {
+    backgroundRef.current = activeBackground
+    uploadedBackgroundRef.current = uploadedBackground
+  }, [activeBackground, uploadedBackground])
+
   useEffect(() => {
     if (!recording || isPaused) return
     const interval = window.setInterval(() => setElapsed((value) => value + 1), 1000)
@@ -68,12 +81,66 @@ export default function Page() {
     if (uploadedBackground) URL.revokeObjectURL(uploadedBackground)
   }, [uploadedBackground])
 
+  useEffect(() => {
+    const script = document.createElement('script')
+    script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js'
+    script.async = true
+    document.head.appendChild(script)
+    script.onload = () => {
+      const segmenter = new (window as any).SelfieSegmentation({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` })
+      segmenter.setOptions({ modelSelection: 1 })
+      segmenter.onResults((results: any) => {
+      const canvas = canvasRef.current
+      if (!canvas || !videoRef.current) return
+      const context = canvas.getContext('2d')
+      if (!context) return
+      canvas.width = videoRef.current.videoWidth || 1280
+      canvas.height = videoRef.current.videoHeight || 720
+      const width = canvas.width
+      const height = canvas.height
+      const currentBackground = backgroundRef.current
+      context.save()
+      if (currentBackground === 'upload' && uploadedBackgroundRef.current && backgroundImageRef.current?.complete) {
+        context.drawImage(backgroundImageRef.current, 0, 0, width, height)
+      } else {
+        const gradient = context.createLinearGradient(0, 0, width, height)
+        if (currentBackground === 'studio') { gradient.addColorStop(0, '#b87551'); gradient.addColorStop(1, '#633f35') }
+        else if (currentBackground === 'lavender') { gradient.addColorStop(0, '#bca9d4'); gradient.addColorStop(1, '#705b9b') }
+        else if (currentBackground === 'blur') { gradient.addColorStop(0, '#d8cbb8'); gradient.addColorStop(1, '#a9957b') }
+        else { gradient.addColorStop(0, '#ddd8ce'); gradient.addColorStop(1, '#aaa397') }
+        context.fillStyle = gradient
+        context.fillRect(0, 0, width, height)
+      }
+      context.globalCompositeOperation = 'destination-in'
+      context.drawImage(results.segmentationMask, 0, 0, width, height)
+      context.globalCompositeOperation = 'destination-over'
+      context.drawImage(results.image, 0, 0, width, height)
+      context.restore()
+    })
+      segmenterRef.current = segmenter
+      setSegmentationReady(true)
+    }
+    return () => { script.remove(); segmenterRef.current?.close(); segmenterRef.current = null; setSegmentationReady(false) }
+  }, [])
+
+  useEffect(() => {
+    if (!cameraOn || !videoRef.current || !segmenterRef.current) return
+    const processFrame = async () => {
+      if (videoRef.current && segmenterRef.current) await segmenterRef.current.send({ image: videoRef.current })
+      animationRef.current = requestAnimationFrame(processFrame)
+    }
+    animationRef.current = requestAnimationFrame(processFrame)
+    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
+  }, [cameraOn, segmentationReady])
+
   const startCamera = async () => {
     try {
       setPermissionError('')
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
+      if (canvasRef.current) processedStreamRef.current = canvasRef.current.captureStream(30)
+      processedStreamRef.current?.addTrack(stream.getAudioTracks()[0])
       setCameraOn(true)
     } catch {
       setPermissionError('Camera access is needed to preview your recording.')
@@ -89,7 +156,8 @@ export default function Page() {
     }
     if (!streamRef.current) return
     chunksRef.current = []
-    const recorder = new MediaRecorder(streamRef.current)
+    const outputStream = processedStreamRef.current ?? streamRef.current
+    const recorder = new MediaRecorder(outputStream)
     recorder.ondataavailable = (event) => event.data.size && chunksRef.current.push(event.data)
     recorder.onstop = () => {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' })
@@ -118,7 +186,11 @@ export default function Page() {
     const file = event.target.files?.[0]
     if (!file) return
     if (uploadedBackground) URL.revokeObjectURL(uploadedBackground)
-    setUploadedBackground(URL.createObjectURL(file))
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => { backgroundImageRef.current = image }
+    image.src = objectUrl
+    setUploadedBackground(objectUrl)
     setActiveBackground('upload')
   }
 
@@ -149,8 +221,8 @@ export default function Page() {
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#a19c94]">New recording</p><h1 className="font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Make your point.</h1></div><div className="hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-[#77736d] shadow-sm sm:flex"><span className="size-2 rounded-full bg-[#81b6a3]" /> Camera ready</div></div>
           <div className={`relative aspect-video overflow-hidden rounded-[26px] border border-white/70 bg-[#d8d5ce] shadow-[0_20px_60px_rgba(61,55,46,0.10)] ${backgroundClass}`}>
-            {activeBackground === 'upload' && uploadedBackground && <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${uploadedBackground}")` }} aria-label="Uploaded background" />}
-            <video ref={videoRef} autoPlay muted playsInline className={`face-cutout absolute inset-0 size-full object-cover ${activeBackground === 'blur' ? 'scale-105 blur-xl' : ''} ${cameraOn ? '' : 'opacity-0'}`} style={{ opacity: cameraOn ? blendAmount / 100 : 0 }} />
+            <video ref={videoRef} autoPlay muted playsInline className="absolute size-px opacity-0" />
+            <canvas ref={canvasRef} className={`absolute inset-0 size-full object-cover ${cameraOn ? '' : 'opacity-0'}`} aria-label="AI segmented camera preview" />
             {!cameraOn && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center"><div className="flex size-16 items-center justify-center rounded-2xl bg-white/80 text-[#8f8a80] shadow-sm"><Camera /></div><div><p className="font-medium">Your camera preview will appear here</p><p className="mt-1 text-sm text-[#8f8a80]">Turn on your camera to frame your shot.</p></div><button onClick={startCamera} className="rounded-full bg-[#242321] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#383632]"><Camera data-icon="inline-start" /> Enable camera</button></div>}
             <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-white/85 px-3 py-2 text-xs font-medium backdrop-blur"><Sparkles className="text-[#c48667]" /> {activeBackground === 'upload' ? 'Custom background' : backgrounds.find((item) => item.value === activeBackground)?.name}</div>
             {recording && <div className="absolute right-5 top-5 flex items-center gap-2 rounded-full bg-[#242321]/85 px-3 py-2 text-xs font-semibold text-white"><span className="size-2 rounded-full bg-[#e47f70]" /> {isPaused ? 'Paused' : 'Recording'} · {formatTime(elapsed)}</div>}
@@ -161,7 +233,7 @@ export default function Page() {
         </div>
 
         <aside className="flex flex-col gap-4 lg:pt-[74px]">
-          <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Background</h2><p className="mt-1 text-xs text-[#918c83]">Set the scene for your video.</p></div><button onClick={() => fileRef.current?.click()} className="flex size-9 items-center justify-center rounded-xl bg-[#f4f1ed] text-[#716d66] hover:bg-[#ebe7e1]" aria-label="Upload background"><ImagePlus /></button><input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" /></div><div className="grid grid-cols-2 gap-2">{backgrounds.map((item) => <button key={item.value} onClick={() => setActiveBackground(item.value)} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === item.value ? 'border-[#c48667]' : 'border-transparent'}`}><div className={`absolute inset-0 ${item.className}`} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">{item.name}</span>{activeBackground === item.value && <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-[#c48667] text-white"><Check /></span>}</button>)}{uploadedBackground && <button onClick={() => setActiveBackground('upload')} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === 'upload' ? 'border-[#c48667]' : 'border-transparent'}`}><div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${uploadedBackground})` }} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">Your upload</span></button>}<button onClick={() => fileRef.current?.click()} className="flex aspect-[1.45] flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#d8d3cb] text-xs text-[#918c83] hover:bg-[#faf9f7]"><Upload /><span>Upload image</span></button></div><div className="mt-5 rounded-xl bg-[#f6f4f1] p-3"><div className="mb-2 flex items-center justify-between"><label htmlFor="blend-amount" className="text-xs font-semibold text-[#716d66]">Face cutout blend</label><span className="text-xs tabular-nums text-[#918c83]">{blendAmount}%</span></div><input id="blend-amount" type="range" min="35" max="100" value={blendAmount} onChange={(event) => setBlendAmount(Number(event.target.value))} className="w-full accent-[#c48667]" /><div className="mt-1 flex justify-between text-[10px] text-[#aaa69e]"><span>More background</span><span>More face</span></div></div></div>
+          <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Background</h2><p className="mt-1 text-xs text-[#918c83]">Set the scene for your video.</p></div><button onClick={() => fileRef.current?.click()} className="flex size-9 items-center justify-center rounded-xl bg-[#f4f1ed] text-[#716d66] hover:bg-[#ebe7e1]" aria-label="Upload background"><ImagePlus /></button><input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" /></div><div className="grid grid-cols-2 gap-2">{backgrounds.map((item) => <button key={item.value} onClick={() => setActiveBackground(item.value)} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === item.value ? 'border-[#c48667]' : 'border-transparent'}`}><div className={`absolute inset-0 ${item.className}`} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">{item.name}</span>{activeBackground === item.value && <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-[#c48667] text-white"><Check /></span>}</button>)}{uploadedBackground && <button onClick={() => setActiveBackground('upload')} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === 'upload' ? 'border-[#c48667]' : 'border-transparent'}`}><div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${uploadedBackground})` }} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">Your upload</span></button>}<button onClick={() => fileRef.current?.click()} className="flex aspect-[1.45] flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#d8d3cb] text-xs text-[#918c83] hover:bg-[#faf9f7]"><Upload /><span>Upload image</span></button></div></div>
           <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Camera & mic</h2><p className="mt-1 text-xs text-[#918c83]">Check your setup before recording.</p></div><button onClick={() => setShowSettings((value) => !value)} className="text-xs font-semibold text-[#b06f55]">{showSettings ? 'Done' : 'Adjust'}</button></div><div className="flex items-center justify-between rounded-xl bg-[#f6f4f1] px-3 py-3"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-white text-[#716d66]"><Camera /></span><div><p className="text-sm font-medium">Facecam</p><p className="text-xs text-[#969088]">{cameraOn ? 'Connected' : 'Not connected'}</p></div></div><span className={`size-2.5 rounded-full ${cameraOn ? 'bg-[#81b6a3]' : 'bg-[#d4cfc7]'}`} /></div>{showSettings && <div className="mt-3 flex items-center justify-between rounded-xl border border-[#ebe7e1] px-3 py-3 text-sm"><span className="text-[#716d66]">Mirror video</span><span className="rounded-full bg-[#242321] px-2 py-1 text-[10px] font-semibold text-white">ON</span></div>}</div>
           <div className="rounded-2xl bg-[#242321] p-5 text-white"><div className="flex items-start justify-between"><div><p className="text-xs uppercase tracking-[0.16em] text-[#aaa69e]">Your recording</p><p className="mt-3 font-serif text-3xl">{formatTime(elapsed)}</p></div><Download className="text-[#f0b18e]" /></div><div className="mt-5 flex items-center gap-2 text-xs text-[#aaa69e]"><span className="size-2 rounded-full bg-[#81b6a3]" /> Downloads automatically when you stop.</div></div>
         </aside>

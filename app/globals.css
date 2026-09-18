@@ -153,11 +153,6 @@
   }
 }
 
-.face-cutout {
-  -webkit-mask-image: radial-gradient(ellipse 33% 47% at 50% 43%, #000 58%, rgba(0,0,0,.92) 72%, transparent 100%);
-  mask-image: radial-gradient(ellipse 33% 47% at 50% 43%, #000 58%, rgba(0,0,0,.92) 72%, transparent 100%);
-}
-
 .bg-original {
   background: radial-gradient(circle at 48% 35%, oklch(0.9 0.03 75), oklch(0.78 0.035 75));
 }
