@@ -52,7 +52,9 @@ export default function Page() {
   const [showSettings, setShowSettings] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [permissionError, setPermissionError] = useState('')
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('dark')
+  const [recordingQuality, setRecordingQuality] = useState<'720p' | '1080p'>('1080p')
+  const [segmentationModel, setSegmentationModel] = useState<'fast' | 'quality'>('quality')
   const [systemDark, setSystemDark] = useState(false)
 
   useEffect(() => {
@@ -67,12 +69,14 @@ export default function Page() {
   const uploadedBackgroundRef = useRef(uploadedBackground)
   const backgroundImageRef = useRef<HTMLImageElement | null>(null)
   const mirrorRef = useRef(mirrorVideo)
+  const modelRef = useRef(segmentationModel)
 
   useEffect(() => {
     backgroundRef.current = activeBackground
     uploadedBackgroundRef.current = uploadedBackground
     mirrorRef.current = mirrorVideo
-  }, [activeBackground, uploadedBackground, mirrorVideo])
+    modelRef.current = segmentationModel
+  }, [activeBackground, uploadedBackground, mirrorVideo, segmentationModel])
 
   useEffect(() => {
     if (!recording || isPaused) return
@@ -92,7 +96,7 @@ export default function Page() {
     document.head.appendChild(script)
     script.onload = () => {
       const segmenter = new (window as any).SelfieSegmentation({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}` })
-      segmenter.setOptions({ modelSelection: 1 })
+      segmenter.setOptions({ modelSelection: modelRef.current === 'quality' ? 1 : 0 })
       segmenter.onResults((results: any) => {
       const canvas = canvasRef.current
       if (!canvas || !videoRef.current) return
@@ -117,9 +121,9 @@ export default function Page() {
         personContext.translate(width, 0)
         personContext.scale(-1, 1)
       }
-      personContext.drawImage(results.segmentationMask, 0, 0, width, height)
-      personContext.globalCompositeOperation = 'source-in'
       personContext.drawImage(results.image, 0, 0, width, height)
+      personContext.globalCompositeOperation = 'destination-in'
+      personContext.drawImage(results.segmentationMask, 0, 0, width, height)
       personContext.restore()
 
       context.globalCompositeOperation = 'source-over'
@@ -177,14 +181,19 @@ export default function Page() {
     if (!streamRef.current) return
     chunksRef.current = []
     const outputStream = processedStreamRef.current ?? streamRef.current
-    const recorder = new MediaRecorder(outputStream)
+    const mp4Type = 'video/mp4;codecs=h264,aac'
+    const webmType = 'video/webm;codecs=vp9,opus'
+    const mimeType = MediaRecorder.isTypeSupported(mp4Type) ? mp4Type : MediaRecorder.isTypeSupported(webmType) ? webmType : ''
+    const recorder = new MediaRecorder(outputStream, mimeType ? { mimeType, videoBitsPerSecond: recordingQuality === '1080p' ? 6000000 : 3500000 } : undefined)
     recorder.ondataavailable = (event) => event.data.size && chunksRef.current.push(event.data)
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' })
+      const type = recorderRef.current?.mimeType || 'video/webm'
+      const extension = type.includes('mp4') ? 'mp4' : 'webm'
+      const blob = new Blob(chunksRef.current, { type })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `talking-head-${new Date().toISOString().slice(0, 10)}.webm`
+      link.download = `talking-head-${new Date().toISOString().slice(0, 10)}.${extension}`
       link.click()
       URL.revokeObjectURL(url)
     }
@@ -254,7 +263,7 @@ export default function Page() {
 
         <aside className="flex flex-col gap-4 lg:pt-[74px]">
           <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Background</h2><p className="mt-1 text-xs text-[#918c83]">Set the scene for your video.</p></div><button onClick={() => fileRef.current?.click()} className="flex size-9 items-center justify-center rounded-xl bg-[#f4f1ed] text-[#716d66] hover:bg-[#ebe7e1]" aria-label="Upload background"><ImagePlus /></button><input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" /></div><div className="grid grid-cols-2 gap-2">{backgrounds.map((item) => <button key={item.value} onClick={() => setActiveBackground(item.value)} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === item.value ? 'border-[#c48667]' : 'border-transparent'}`}><div className={`absolute inset-0 ${item.className}`} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">{item.name}</span>{activeBackground === item.value && <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-[#c48667] text-white"><Check /></span>}</button>)}{uploadedBackground && <button onClick={() => setActiveBackground('upload')} className={`group relative aspect-[1.45] overflow-hidden rounded-xl border-2 text-left transition ${activeBackground === 'upload' ? 'border-[#c48667]' : 'border-transparent'}`}><div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${uploadedBackground})` }} /><span className="absolute bottom-2 left-2 rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium backdrop-blur">Your upload</span></button>}<button onClick={() => fileRef.current?.click()} className="flex aspect-[1.45] flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#d8d3cb] text-xs text-[#918c83] hover:bg-[#faf9f7]"><Upload /><span>Upload image</span></button></div></div>
-          <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Camera & mic</h2><p className="mt-1 text-xs text-[#918c83]">Check your setup before recording.</p></div><button onClick={() => setShowSettings((value) => !value)} className="text-xs font-semibold text-[#b06f55]">{showSettings ? 'Done' : 'Adjust'}</button></div><div className="flex items-center justify-between rounded-xl bg-[#f6f4f1] px-3 py-3"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-white text-[#716d66]"><Camera /></span><div><p className="text-sm font-medium">Facecam</p><p className="text-xs text-[#969088]">{cameraOn ? 'Connected' : 'Not connected'}</p></div></div><span className={`size-2.5 rounded-full ${cameraOn ? 'bg-[#81b6a3]' : 'bg-[#d4cfc7]'}`} /></div>{showSettings && <div className="mt-3 flex items-center justify-between rounded-xl border border-[#ebe7e1] px-3 py-3 text-sm"><div><span className="text-[#716d66]">Mirror video</span><p className="mt-1 text-xs text-[#969088]">Flip the person feed like a mirror.</p></div><button type="button" role="switch" aria-checked={mirrorVideo} onClick={() => setMirrorVideo((value) => !value)} className={`relative h-6 w-11 rounded-full transition ${mirrorVideo ? 'bg-[#242321]' : 'bg-[#d4cfc7]'}`}><span className={`absolute top-1 size-4 rounded-full bg-white transition ${mirrorVideo ? 'left-6' : 'left-1'}`} /></button></div>}</div>
+          <div className="rounded-2xl border border-[#e3e0da] bg-white p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-semibold">Camera & mic</h2><p className="mt-1 text-xs text-[#918c83]">Check your setup before recording.</p></div><button onClick={() => setShowSettings((value) => !value)} className="text-xs font-semibold text-[#b06f55]">{showSettings ? 'Done' : 'Adjust'}</button></div><div className="flex items-center justify-between rounded-xl bg-[#f6f4f1] px-3 py-3"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-lg bg-white text-[#716d66]"><Camera /></span><div><p className="text-sm font-medium">Facecam</p><p className="text-xs text-[#969088]">{cameraOn ? 'Connected' : 'Not connected'}</p></div></div><span className={`size-2.5 rounded-full ${cameraOn ? 'bg-[#81b6a3]' : 'bg-[#d4cfc7]'}`} /></div>{showSettings && <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[#ebe7e1] px-3 py-3 text-sm"><div className="flex items-center justify-between"><div><span className="text-[#716d66]">Mirror video</span><p className="mt-1 text-xs text-[#969088]">Flip the person feed like a mirror.</p></div><button type="button" role="switch" aria-checked={mirrorVideo} onClick={() => setMirrorVideo((value) => !value)} className={`relative h-6 w-11 rounded-full transition ${mirrorVideo ? 'bg-[#242321]' : 'bg-[#d4cfc7]'}`}><span className={`absolute top-1 size-4 rounded-full bg-white transition ${mirrorVideo ? 'left-6' : 'left-1'}`} /></button></div><label className="flex items-center justify-between gap-3 text-xs text-[#716d66]">Recording quality<select value={recordingQuality} onChange={(event) => setRecordingQuality(event.target.value as '720p' | '1080p')} className="rounded-lg border border-[#dfddd8] bg-transparent px-2 py-1 text-xs"><option value="720p">720p · smaller</option><option value="1080p">1080p · sharper</option></select></label><label className="flex items-center justify-between gap-3 text-xs text-[#716d66]">Segmentation<select value={segmentationModel} onChange={(event) => setSegmentationModel(event.target.value as 'fast' | 'quality')} className="rounded-lg border border-[#dfddd8] bg-transparent px-2 py-1 text-xs"><option value="quality">Quality edges</option><option value="fast">Fast preview</option></select></label></div>}</div>
           <div className="rounded-2xl bg-[#242321] p-5 text-white"><div className="flex items-start justify-between"><div><p className="text-xs uppercase tracking-[0.16em] text-[#aaa69e]">Your recording</p><p className="mt-3 font-serif text-3xl">{formatTime(elapsed)}</p></div><Download className="text-[#f0b18e]" /></div><div className="mt-5 flex items-center gap-2 text-xs text-[#aaa69e]"><span className="size-2 rounded-full bg-[#81b6a3]" /> Downloads automatically when you stop.</div></div>
         </aside>
       </section>

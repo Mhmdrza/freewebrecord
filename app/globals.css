@@ -189,8 +189,11 @@
 .theme-dark .theme-switcher { border-color:#3b3936; background:rgba(36,35,33,.92); }
 .theme-dark .theme-switcher button.active { background:#f0b18e; color:#242321; }
 .theme-dark header button, .theme-dark aside > div:not(:last-child), .theme-dark aside .bg-white { background:#242321 !important; border-color:#3b3936 !important; color:#f4f1ed !important; }
-.theme-dark aside p, .theme-dark header p, .theme-dark footer, .theme-dark .text-\[\#89857d\], .theme-dark .text-\[\#918c83\], .theme-dark .text-\[\#969088\] { color:#aaa69e !important; }
+.theme-dark header, .theme-dark aside, .theme-dark footer, .theme-dark h1, .theme-dark h2, .theme-dark h3, .theme-dark label, .theme-dark .text-\[\#716d66\], .theme-dark .text-\[\#77736d\], .theme-dark .text-\[\#89857d\], .theme-dark .text-\[\#918c83\], .theme-dark .text-\[\#969088\], .theme-dark .text-\[\#a19c94\] { color:#f0ece6 !important; }
+.theme-dark p, .theme-dark span.text-\[\#aaa69e\], .theme-dark .text-\[\#c7c2b9\] { color:#b9b2a8 !important; }
 .theme-dark .bg-\[\#f6f4f1\], .theme-dark .bg-\[\#f4f1ed\] { background:#302e2b !important; }
+.theme-dark select { color:#f4f1ed; background:#302e2b; border-color:#514c46; }
+.theme-dark option { background:#302e2b; color:#f4f1ed; }
 
 @layer base {
   * {
