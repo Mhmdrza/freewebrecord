@@ -167,8 +167,10 @@ export default function Page() {
       const currentBackground = backgroundRef.current
       const personCanvas = personCanvasRef.current ?? document.createElement('canvas')
       personCanvasRef.current = personCanvas
-      personCanvas.width = width
-      personCanvas.height = height
+      if (personCanvas.width !== width || personCanvas.height !== height) {
+        personCanvas.width = width
+        personCanvas.height = height
+      }
       const personContext = personCanvas.getContext('2d')
       if (!personContext) return
 
@@ -209,8 +211,15 @@ export default function Page() {
   }, [])
 
   useEffect(() => {
+    segmenterRef.current?.setOptions({ modelSelection: segmentationModel === 'quality' ? 1 : 0 })
+  }, [segmentationModel])
+
+  useEffect(() => {
     if (!cameraOn || !videoRef.current || !segmenterRef.current) return
+    let cancelled = false
+    let inFlight = false
     const processFrame = async () => {
+      if (cancelled) return
       try {
         const video = videoRef.current
         const canvas = canvasRef.current
@@ -236,18 +245,26 @@ export default function Page() {
                 context.drawImage(overlayImageRef.current, 0, 0, width, height)
               }
             }
-          } else if (segmenterRef.current) {
-            await segmenterRef.current.send({ image: video })
+          } else if (segmenterRef.current && !inFlight) {
+            // SelfieSegmentation.send() is slower than rAF. Awaiting it serially
+            // queues up inference calls until the canvas stops updating and the
+            // recording freezes. Drop frames while one send is in flight.
+            inFlight = true
+            try {
+              await segmenterRef.current.send({ image: video })
+            } finally {
+              inFlight = false
+            }
           }
         }
       } catch {
         // Keep scheduling frames if a transient segmentation error occurs.
       } finally {
-        animationRef.current = requestAnimationFrame(processFrame)
+        if (!cancelled) animationRef.current = requestAnimationFrame(processFrame)
       }
     }
     animationRef.current = requestAnimationFrame(processFrame)
-    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
+    return () => { cancelled = true; if (animationRef.current) cancelAnimationFrame(animationRef.current) }
   }, [cameraOn, segmentationReady])
 
   const startCamera = async () => {
@@ -286,9 +303,13 @@ export default function Page() {
     }
     if (!streamRef.current || stoppingRef.current) return
     const outputStream = processedStreamRef.current ?? streamRef.current
-    const mp4Type = 'video/mp4;codecs=h264,aac'
-    const webmType = 'video/webm;codecs=vp9,opus'
-    const mimeType = MediaRecorder.isTypeSupported(mp4Type) ? mp4Type : MediaRecorder.isTypeSupported(webmType) ? webmType : ''
+    // Prefer WebM for canvas capture. Chrome's MP4 MediaRecorder is known to
+    // emit a frozen video track after the first keyframe (~2s) on canvas
+    // sources while audio continues. Safari falls back to MP4.
+    const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=h264,aac', 'video/mp4']
+    const mimeType = candidates.find((type) => {
+      try { return MediaRecorder.isTypeSupported(type) } catch { return false }
+    }) ?? ''
     const recorder = new MediaRecorder(outputStream, mimeType ? { mimeType, videoBitsPerSecond: recordingQuality === '1080p' ? 6000000 : 3500000 } : undefined)
     const chunks: Blob[] = []
     recordingChunksRef.current = chunks
