@@ -42,7 +42,8 @@ export default function Page() {
   const overlayFileRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const recordingChunksRef = useRef<Blob[]>([])
+  const stoppingRef = useRef(false)
   const [cameraOn, setCameraOn] = useState(false)
   const [segmentationReady, setSegmentationReady] = useState(false)
   const [mirrorVideo, setMirrorVideo] = useState(true)
@@ -255,8 +256,17 @@ export default function Page() {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       streamRef.current = stream
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
-      if (canvasRef.current) processedStreamRef.current = canvasRef.current.captureStream(30)
-      processedStreamRef.current?.addTrack(stream.getAudioTracks()[0])
+      const canvas = canvasRef.current
+      if (canvas) {
+        const width = videoRef.current?.videoWidth || 1280
+        const height = videoRef.current?.videoHeight || 720
+        canvas.width = width
+        canvas.height = height
+        processedStreamRef.current?.getTracks().forEach((track) => track.stop())
+        processedStreamRef.current = canvas.captureStream(30)
+        const audioTrack = stream.getAudioTracks()[0]
+        if (audioTrack) processedStreamRef.current.addTrack(audioTrack)
+      }
       setCameraOn(true)
     } catch {
       setPermissionError('Camera access is needed to preview your recording.')
@@ -264,32 +274,49 @@ export default function Page() {
   }
 
   const toggleRecording = () => {
-    if (recording && recorderRef.current) {
-      recorderRef.current.stop()
+    const activeRecorder = recorderRef.current
+    if (recording && activeRecorder) {
+      if (activeRecorder.state !== 'inactive') {
+        stoppingRef.current = true
+        activeRecorder.stop()
+      }
       setRecording(false)
       setIsPaused(false)
       return
     }
-    if (!streamRef.current) return
-    chunksRef.current = []
+    if (!streamRef.current || stoppingRef.current) return
     const outputStream = processedStreamRef.current ?? streamRef.current
     const mp4Type = 'video/mp4;codecs=h264,aac'
     const webmType = 'video/webm;codecs=vp9,opus'
     const mimeType = MediaRecorder.isTypeSupported(mp4Type) ? mp4Type : MediaRecorder.isTypeSupported(webmType) ? webmType : ''
     const recorder = new MediaRecorder(outputStream, mimeType ? { mimeType, videoBitsPerSecond: recordingQuality === '1080p' ? 6000000 : 3500000 } : undefined)
-    recorder.ondataavailable = (event) => event.data.size && chunksRef.current.push(event.data)
-    recorder.onstop = () => {
-      const type = recorderRef.current?.mimeType || 'video/webm'
-      const extension = type.includes('mp4') ? 'mp4' : 'webm'
-      const blob = new Blob(chunksRef.current, { type })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `talking-head-${new Date().toISOString().slice(0, 10)}.${extension}`
-      link.click()
-      URL.revokeObjectURL(url)
+    const chunks: Blob[] = []
+    recordingChunksRef.current = chunks
+    recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data) }
+    recorder.onerror = () => {
+      stoppingRef.current = false
+      if (recorderRef.current === recorder) recorderRef.current = null
+      setRecording(false)
+      setIsPaused(false)
+      setPermissionError('The browser stopped the recording unexpectedly. Please try again.')
     }
-    recorder.start()
+    recorder.onstop = () => {
+      const type = recorder.mimeType || 'video/webm'
+      const extension = type.includes('mp4') ? 'mp4' : 'webm'
+      const blob = new Blob(chunks, { type })
+      if (blob.size) {
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `talking-head-${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`
+        link.click()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }
+      if (recorderRef.current === recorder) recorderRef.current = null
+      recordingChunksRef.current = []
+      stoppingRef.current = false
+    }
+    recorder.start(1000)
     recorderRef.current = recorder
     setElapsed(0)
     setRecording(true)
