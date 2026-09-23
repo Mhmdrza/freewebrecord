@@ -57,6 +57,49 @@ export default function Page() {
   const [recordingQuality, setRecordingQuality] = useState<'720p' | '1080p'>('1080p')
   const [segmentationModel, setSegmentationModel] = useState<'fast' | 'quality'>('quality')
   const [systemDark, setSystemDark] = useState(false)
+  const settingsLoadedRef = useRef(false)
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('freewebrecord-settings')
+      if (saved) {
+        const settings = JSON.parse(saved) as Partial<{
+          mirrorVideo: boolean
+          maskingEnabled: boolean
+          theme: 'system' | 'light' | 'dark'
+          recordingQuality: '720p' | '1080p'
+          segmentationModel: 'fast' | 'quality'
+          activeBackground: string
+        }>
+        if (typeof settings.mirrorVideo === 'boolean') setMirrorVideo(settings.mirrorVideo)
+        if (typeof settings.maskingEnabled === 'boolean') setMaskingEnabled(settings.maskingEnabled)
+        if (settings.theme === 'system' || settings.theme === 'light' || settings.theme === 'dark') setTheme(settings.theme)
+        if (settings.recordingQuality === '720p' || settings.recordingQuality === '1080p') setRecordingQuality(settings.recordingQuality)
+        if (settings.segmentationModel === 'fast' || settings.segmentationModel === 'quality') setSegmentationModel(settings.segmentationModel)
+        if (typeof settings.activeBackground === 'string' && backgrounds.some((item) => item.value === settings.activeBackground)) setActiveBackground(settings.activeBackground)
+      }
+    } catch {
+      // Ignore malformed or unavailable local settings and use defaults.
+    } finally {
+      settingsLoadedRef.current = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!settingsLoadedRef.current) return
+    try {
+      window.localStorage.setItem('freewebrecord-settings', JSON.stringify({
+        mirrorVideo,
+        maskingEnabled,
+        theme,
+        recordingQuality,
+        segmentationModel,
+        activeBackground: activeBackground === 'upload' ? 'original' : activeBackground,
+      }))
+    } catch {
+      // Storage may be unavailable in private browsing or restricted contexts.
+    }
+  }, [mirrorVideo, maskingEnabled, theme, recordingQuality, segmentationModel, activeBackground])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
