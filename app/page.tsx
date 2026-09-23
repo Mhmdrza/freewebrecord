@@ -287,7 +287,7 @@ export default function Page() {
 
       <section className="mx-auto grid max-w-[1440px] gap-6 px-5 pb-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:px-12">
         <div className="min-w-0">
-          <div className="mb-5 flex items-end justify-between"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#a19c94]">New recording</p><h1 className="font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Make your point.</h1></div><div className="hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-[#77736d] shadow-sm sm:flex"><span className="size-2 rounded-full bg-[#81b6a3]" /> Camera ready</div></div>
+          <div className="mb-5 flex items-end justify-between"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#a19c94]">New recording</p><h1 className="font-serif text-4xl tracking-[-0.04em] sm:text-5xl">Make your point.</h1></div><div className="camera-ready-badge hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-[#77736d] shadow-sm sm:flex"><span className="size-2 rounded-full bg-[#81b6a3]" /> Camera ready</div></div>
           <div className={`relative aspect-video overflow-hidden rounded-[26px] border border-white/70 bg-[#d8d5ce] shadow-[0_20px_60px_rgba(61,55,46,0.10)] ${backgroundClass}`}>
             <video ref={videoRef} autoPlay muted playsInline className="absolute size-px opacity-0" />
             <canvas ref={canvasRef} className={`absolute inset-0 size-full object-cover ${cameraOn ? '' : 'opacity-0'}`} aria-label="AI segmented camera preview" />
