@@ -193,6 +193,9 @@
 .theme-dark p, .theme-dark span.text-\[\#aaa69e\], .theme-dark .text-\[\#c7c2b9\] { color:#b9b2a8 !important; }
 .theme-dark .bg-\[\#f6f4f1\], .theme-dark .bg-\[\#f4f1ed\] { background:#302e2b !important; }
 .theme-dark .bg-white\/80, .theme-dark .bg-white\/85, .theme-dark .bg-white\/90 { background:rgba(36,35,33,.9) !important; color:#f4f1ed !important; }
+.theme-dark button[role="switch"] { background:#514c46 !important; border:1px solid #70695f; }
+.theme-dark button[role="switch"][aria-checked="true"] { background:#f0b18e !important; border-color:#f0b18e; }
+.theme-dark button[role="switch"] > span { background:#f8f5ef !important; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .theme-dark select { color:#f4f1ed; background:#302e2b; border-color:#514c46; }
 .theme-dark option { background:#302e2b; color:#f4f1ed; }
 
