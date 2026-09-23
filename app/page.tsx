@@ -105,10 +105,14 @@ export default function Page() {
       if (!canvas || !videoRef.current) return
       const context = canvas.getContext('2d')
       if (!context) return
-      canvas.width = videoRef.current.videoWidth || 1280
-      canvas.height = videoRef.current.videoHeight || 720
-      const width = canvas.width
-      const height = canvas.height
+      const width = videoRef.current.videoWidth || 1280
+      const height = videoRef.current.videoHeight || 720
+      // Resizing a canvas clears its bitmap and can interrupt the canvas capture track.
+      // Only resize when the source video dimensions actually change.
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width
+        canvas.height = height
+      }
       const currentBackground = backgroundRef.current
       const personCanvas = personCanvasRef.current ?? document.createElement('canvas')
       personCanvasRef.current = personCanvas
@@ -153,8 +157,15 @@ export default function Page() {
   useEffect(() => {
     if (!cameraOn || !videoRef.current || !segmenterRef.current) return
     const processFrame = async () => {
-      if (videoRef.current && segmenterRef.current) await segmenterRef.current.send({ image: videoRef.current })
-      animationRef.current = requestAnimationFrame(processFrame)
+      try {
+        if (videoRef.current && segmenterRef.current && videoRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          await segmenterRef.current.send({ image: videoRef.current })
+        }
+      } catch {
+        // Keep scheduling frames if a transient segmentation error occurs.
+      } finally {
+        animationRef.current = requestAnimationFrame(processFrame)
+      }
     }
     animationRef.current = requestAnimationFrame(processFrame)
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
